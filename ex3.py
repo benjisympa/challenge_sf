@@ -17,7 +17,6 @@ from keras.utils import np_utils
 from keras import backend as K
 # K.set_image_dim_ordering('th')
 
-debug = False
 batch_size = 200
 nb_epoch = 1
 
@@ -35,44 +34,36 @@ kernel_size = (5, 5)
 # load data
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
 
-if debug:
-    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
-
-def plot_images():
-    # plot 4 images as gray scale
-    plt.subplot(221)
-    plt.imshow(X_train[0], cmap=plt.get_cmap('gray'))
-    plt.subplot(222)
-    plt.imshow(X_train[1], cmap=plt.get_cmap('gray'))
-    plt.subplot(223)
-    plt.imshow(X_train[2], cmap=plt.get_cmap('gray'))
-    plt.subplot(224)
-    plt.imshow(X_train[3], cmap=plt.get_cmap('gray'))
-    # show the plot
-    plt.show()
-
-if debug and False:
-    plot_images()
+print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
 
 # flatten 28*28 images to use the color and to have a good shape for the entry of the network
 X_train = X_train.reshape(X_train.shape[0], color, img_rows, img_cols).astype('float32')
 X_test = X_test.reshape(X_test.shape[0], color, img_rows, img_cols).astype('float32')
 
-if debug:
-    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
-    print(X_train[0, :, :, :])
+print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+print(X_train[0, :, :, :])
 
 # normalize inputs from 0-255 to 0-1
 X_train /= 255
 X_test /= 255
 
+def mixing(y_train, p):
+    # randomize 5% of the training images
+    p_t = int(y_train.shape[0] * (1-p))
+    start = np.random.randint(0, p_t)
+    # print('a', p_t, start, start + int(y_train.shape[0] * p))
+    for i in range(start, start + int(y_train.shape[0] * p)):
+        y_train[i] = np.random.randint(0, 10)
+        # print(y_train[i])
+    # print('b*********************************')
+    return y_train
+
 # one hot encode outputs
-y_train = np_utils.to_categorical(y_train)
+# y_train = np_utils.to_categorical(y_train)
 y_test = np_utils.to_categorical(y_test)
 num_classes = y_test.shape[1]
 
-if debug:
-    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
 # y = y_test[0:10, :]
 ya = pd.DataFrame(y_test)
 # print(X_test[[0, 2, 4], :, :].shape)
@@ -82,8 +73,7 @@ for i in range(10):
     y_cat.append(ya[ya[i] > 0].values)
     # print(ya[ya[i] > 0].index)
     X_cat.append(X_test[ya[ya[i] > 0].index, :, :])
-    if debug:
-        print(y_cat[i].shape, X_cat[i].shape)
+    print(y_cat[i].shape, X_cat[i].shape)
 
 def baseline_model():
     # create model
@@ -98,20 +88,32 @@ def baseline_model():
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
-# build the model
-model = baseline_model()
-# Fit the model
-model.fit(X_train, y_train, validation_data=(X_test, y_test), nb_epoch=nb_epoch, batch_size=batch_size, verbose=2)
-# Final evaluation of the model
-scores = model.evaluate(X_test, y_test, verbose=1)
-if debug:
+def fit_scores(y_train):
+    # build the model
+    model = baseline_model()
+    # Fit the model
+    model.fit(X_train, y_train, validation_data=(X_test, y_test), nb_epoch=nb_epoch, batch_size=batch_size, verbose=2)
+    # Final evaluation of the model
+    scores = model.evaluate(X_test, y_test, verbose=1)
     print(scores)
-print("Baseline Error for all categorie : %.2f%%" % (100-scores[1]*100))
-# Final evaluation of the model for each categories
-print("\n         ***___***")
-print("Error for all categories one-by-one : \n")
-for i in range(num_classes):
-    scores = model.evaluate(X_cat[i], y_cat[i], verbose=1)
-    if debug:
-        print(scores)
-    print("Baseline Error for categorie ", i, " : %.2f%% \n" % (100-scores[1]*100))
+    # Final evaluation of the model for each categories
+    for i in range(num_classes):
+        scores_i = model.evaluate(X_cat[i], y_cat[i], verbose=1)
+        print(scores_i)
+    print("Baseline Error: %.2f%%" % (100-scores[1]*100))
+    return scores
+
+# y_train = np.sort(y_train)
+print(y_train)
+y_train_before_categorical = np.copy(y_train)
+y_train = np_utils.to_categorical(y_train)
+scores = [fit_scores(y_train)[0]]
+for i in [0.05, 0.15, 0.5, 0.9, 0.95, 0.99]:
+    print('pourcentage ', i)
+    y_train_new = np.copy(y_train_before_categorical)
+    y_train_mix = mixing(y_train_new, i)
+    y_train_mix = np_utils.to_categorical(y_train_mix)
+    scores.append(fit_scores(y_train_mix)[0])
+
+plt.plot([0, 5, 15, 50, 90, 95, 99], scores)
+plt.show()
